@@ -1,0 +1,10 @@
+# Intellij
+out/
+.idea/
+**.iml
+
+# Maven
+target/
+
+# Minecraft Bungeecord
+src/test/server/
