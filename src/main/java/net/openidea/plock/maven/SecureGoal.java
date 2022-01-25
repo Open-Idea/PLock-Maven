@@ -45,6 +45,19 @@ public class SecureGoal extends AbstractMojo {
     @Parameter
     private String[] excludes;
 
+    private void reformatClassURL(String[] classUrls) {
+        String classUrl;
+
+        if (classUrls == null || classUrls.length < 1)
+            return;
+        for (int i = 0; i < classUrls.length; i++) {
+            classUrl = classUrls[i];
+            if (classUrl.endsWith(".class"))
+                continue;
+            classUrls[i] = classUrl.replaceAll("\\.", "/") + ".class";
+        }
+    }
+
     private RSAPrivateKey getPrivateKey() throws NoSuchAlgorithmException, InvalidKeySpecException {
         final byte[] decodedKey;
         final KeyFactory keyFactory;
@@ -52,7 +65,7 @@ public class SecureGoal extends AbstractMojo {
         if (this.privateKey == null || this.privateKey.isEmpty())
             return null;
         decodedKey = Base64.getDecoder().decode(this.privateKey);
-        keyFactory = KeyFactory.getInstance("AES");
+        keyFactory = KeyFactory.getInstance("RSA");
         return (RSAPrivateKey) keyFactory.generatePrivate(new PKCS8EncodedKeySpec(decodedKey));
     }
 
@@ -77,8 +90,9 @@ public class SecureGoal extends AbstractMojo {
         RSAPrivateKey privateKey;
         KeyPair keyPair = null;
 
-        getLog().error("PATH: " + this.classesDirectory.getAbsolutePath());
         jarContentFileSet.setDirectory(this.classesDirectory.getAbsolutePath());
+        reformatClassURL(this.includes);
+        reformatClassURL(this.excludes);
         jarContentFileSet.setIncludes(Arrays.asList((this.includes != null && this.includes.length > 0) ? this.includes : SecureGoal.DEFAULT_INCLUDES));
         jarContentFileSet.setExcludes(Arrays.asList((this.excludes != null && this.excludes.length > 0) ? this.excludes : SecureGoal.DEFAULT_EXCLUDES));
         includedFiles = fileSetManager.getIncludedFiles(jarContentFileSet);
@@ -111,8 +125,8 @@ public class SecureGoal extends AbstractMojo {
         for (String includeFile : includedFiles) {
             getLog().info("Encrypt " + includeFile + " ...");
             try {
-                EncryptData.encryptFile(getLog(), Paths.get(this.classesDirectory.getAbsolutePath(), includeFile), privateKey);
-            } catch (IOException exception) {
+                EncryptData.encryptFile(Paths.get(this.classesDirectory.getAbsolutePath(), includeFile), privateKey);
+            } catch (Exception exception) {
                 getLog().error("Error to encrypt " + includeFile + " file.");
                 getLog().error(exception);
             }

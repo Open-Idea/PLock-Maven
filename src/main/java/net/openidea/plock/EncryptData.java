@@ -1,15 +1,14 @@
 package net.openidea.plock;
 
-import org.apache.maven.plugin.logging.Log;
-
-import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
+import javax.crypto.*;
+import javax.crypto.spec.IvParameterSpec;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.interfaces.RSAPrivateKey;
 
@@ -17,53 +16,38 @@ public class EncryptData {
 
     public static final byte[] MAGIC_NUMBER = new byte[] {'P', 'L', 'O', 'C', 'K'};
 
-    private static SecretKey generateAESKey(final Log log) {
+    private static SecretKey generateAESKey() throws NoSuchAlgorithmException {
         final KeyGenerator keyGenerator;
 
-        try {
-            keyGenerator = KeyGenerator.getInstance("AES");
-            keyGenerator.init(256);
-            return keyGenerator.generateKey();
-        } catch (NoSuchAlgorithmException e) {
-            log.error(e);
-        }
-        return null;
+        keyGenerator = KeyGenerator.getInstance("AES");
+        keyGenerator.init(256);
+        return keyGenerator.generateKey();
     }
 
-    private static byte[] encryptData(final Log log, final byte[] bytes, final SecretKey secretKey) {
+    private static byte[] encryptData(final byte[] bytes, final SecretKey secretKey) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException, InvalidAlgorithmParameterException {
         final Cipher cipher;
 
         if (bytes == null || secretKey == null)
             return null;
-        try {
-            cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-            cipher.init(Cipher.ENCRYPT_MODE, secretKey);
-            return cipher.doFinal(bytes);
-        } catch (Exception e) {
-            log.error(e);
-        }
-        return null;
+        cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey, new IvParameterSpec(new byte[16]));
+        return cipher.doFinal(bytes);
     }
 
-    private static byte[] encryptAESKey(final Log log, final SecretKey secretKey, final RSAPrivateKey rsaPrivateKey) {
+    private static byte[] encryptAESKey(final SecretKey secretKey, final RSAPrivateKey rsaPrivateKey) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
         final Cipher cipher;
 
         if (secretKey == null || rsaPrivateKey == null)
             return null;
-        try {
-            cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
-            cipher.init(Cipher.ENCRYPT_MODE, rsaPrivateKey);
-            return cipher.doFinal(secretKey.getEncoded());
-        } catch (Exception e) {
-            log.error(e);
-        }
-        return null;
+        cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+        cipher.init(Cipher.ENCRYPT_MODE, rsaPrivateKey);
+        return cipher.doFinal(secretKey.getEncoded());
     }
 
-    public static byte[] encrypt(final Log log, final byte[] bytes, final RSAPrivateKey rsaPrivateKey) {
-        final SecretKey aesKey = generateAESKey(log);
-        final byte[] encryptedBytes = encryptData(log, bytes, aesKey);
-        final byte[] encryptedAesKey = encryptAESKey(log, aesKey, rsaPrivateKey);
+    public static byte[] encrypt(final byte[] bytes, final RSAPrivateKey rsaPrivateKey) throws NoSuchAlgorithmException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException, InvalidKeyException, InvalidAlgorithmParameterException {
+        final SecretKey aesKey = generateAESKey();
+        final byte[] encryptedBytes = encryptData(bytes, aesKey);
+        final byte[] encryptedAesKey = encryptAESKey(aesKey, rsaPrivateKey);
         final ByteBuffer byteBuffer;
 
         if (encryptedBytes == null || encryptedAesKey == null)
@@ -75,16 +59,16 @@ public class EncryptData {
         return byteBuffer.array();
     }
 
-    public static void encryptFile(final Log log, final Path filePath, final RSAPrivateKey rsaPrivateKey) throws IOException {
+    public static void encryptFile(final Path filePath, final RSAPrivateKey rsaPrivateKey) throws IOException, NoSuchPaddingException, IllegalBlockSizeException, NoSuchAlgorithmException, BadPaddingException, InvalidKeyException, InvalidAlgorithmParameterException {
         final byte[] fileEncryptBytes;
         final ByteBuffer byteBuffer;
 
         if (filePath == null || rsaPrivateKey == null)
             return;
-        fileEncryptBytes = encrypt(log, Files.readAllBytes(filePath), rsaPrivateKey);
+        fileEncryptBytes = encrypt(Files.readAllBytes(filePath), rsaPrivateKey);
         if (fileEncryptBytes == null)
             return;
-        byteBuffer = ByteBuffer.allocate(4 + fileEncryptBytes.length);
+        byteBuffer = ByteBuffer.allocate(EncryptData.MAGIC_NUMBER.length + fileEncryptBytes.length);
         byteBuffer.put(EncryptData.MAGIC_NUMBER); // 504C4F4B
         byteBuffer.put(fileEncryptBytes);
 
